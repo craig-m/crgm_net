@@ -11,17 +11,17 @@ When I have more time available I will build something better and replace this s
 
 # Stack
 
-## infrastructure
+### infrastructure
 * VPS: https://www.linode.com
 * DNS: https://www.gandi.net/
 * TLS: https://letsencrypt.org/
 
-## web stack
+### web stack
 * OS: https://www.debian.org/ (current stable is Stretch/9)
 * Web server: https://www.nginx.com/
 * Web site: https://jekyllrb.com
 
-## local environment
+### local environment
 * dev/management VM: https://www.vagrantup.com
 * Linode api + tools: https://github.com/linode/linode-cli
 

@@ -1,0 +1,21 @@
+# crgmnet Jekyll blog config
+title: crgm.net
+email: crgm[at]crgm[dot]net
+description: >-
+  The current blog and hosting attempt. V9.
+baseurl: ""
+url: "crgm.net"
+twitter_username: crgm_net
+github_username: craig-m
+source: my_src
+destination: pub
+# Build settings
+markdown: kramdown
+theme: minima
+plugins:
+  - jekyll-feed
+exclude:
+  - Gemfile
+  - Gemfile.lock
+highlighter: pygments
+excerpt_separator: <!--more-->
