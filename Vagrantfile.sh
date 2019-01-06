@@ -8,7 +8,7 @@ apt-get update
 
 # install tools
 apt-get install --assume-yes --quiet \
-  build-essential git uuid pass \
+  build-essential git uuid pass attr \
   rsync wget curl nmap \
   screen tmux vim \
   ruby-full

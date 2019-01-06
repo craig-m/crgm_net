@@ -41,10 +41,10 @@ vagrant ssh
 linode configure
 ```
 
-* skip 'distribution' question since we are using Debian 9. Or use option 6.
+* skip 'distribution' question (Debian 9 is used).
 * pick a datacenter.
-* I use a the `1 - Nanode 1GB` ($5 monthly). Option 1.
-* Skip 'Path to an SSH public' option.
+* I use a the `1 - Nanode 1GB` ($5 monthly) - Option 1.
+* Skip `Path to an SSH public` option.
 
 Config will be saved at `/home/vagrant/.linodecli/config`
 

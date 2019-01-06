@@ -18,6 +18,7 @@
 # <UDF name="deployeruserpassword" Label="admin user password" example="a_secret_sudo_pw" />
 # <UDF name="sshipwhitelist" Label="whitelist ipv4 on temp fw" example="1.2.3.4" />
 
+
 # Init #########################################################################
 
 # start
@@ -51,12 +52,11 @@ thedate=$(date)
 # fetch info about this image:
 curl https://api.linode.com/v4/images/linode/debian9
 
-# make a temp directory under /tmp/tmp.xxxxxxxxxx
-stackscript_dir=$(mktemp -d)
-touch -f $stackscript_dir/temp.txt
-
 # Remount /proc with hidepid option to hide processes from other users
-/usr/bin/sudo mount -o remount,rw,hidepid=2 /proc
+mount -o remount,rw,hidepid=2 /proc
+
+# Remount /dev/shm noexec
+mount -o remount,noexec,nosuid,nodev /dev/shm
 
 # increase ulimit
 ulimit -n 8192
@@ -150,6 +150,7 @@ $IP6TABLES -A OUTPUT -j ACCEPT
 $IPTABLES -A INPUT -i eth0 -p tcp -m tcp --dport 22 -s $SSHIPWHITELIST -m comment --comment "Linode stackscript ssh" -j ACCEPT
 $IPTABLES -A INPUT -i eth0 -p tcp -m tcp --dport 80 -s $SSHIPWHITELIST -m comment --comment "Linode stackscript http" -j ACCEPT
 $IPTABLES -A INPUT -i eth0 -p tcp -m tcp --dport 443 -s $SSHIPWHITELIST -m comment --comment "Linode stackscript https" -j ACCEPT
+$IPTABLES -A INPUT -i eth0 -p tcp -m tcp --dport 8080 -s $SSHIPWHITELIST -m comment --comment "Linode stackscript http alt" -j ACCEPT
 
 # ------ Drop and Log all other incoming ------
 $IPTABLES -N REJECTLOG
@@ -173,6 +174,7 @@ $IP6TABLES -A INPUT -j REJECTLOG
 # save temp fw for later
 # can be restored with: iptables-restore /root/setup/iptables_stackscript
 iptables-save > /root/setup/iptables_stackscript
+
 
 # SSHD #########################################################################
 
@@ -221,18 +223,28 @@ mkdir -p /home/${DEPLOYUSER}/.ssh
 touch /home/${DEPLOYUSER}/.ssh/authorized_keys
 touch /home/${DEPLOYUSER}/.ssh/config
 
+# copy root's authorized_keys to this users (these are removed later)
+cat /root/.ssh/authorized_keys >> /home/${DEPLOYUSER}/.ssh/authorized_keys
 # todo: maybe also add keys from https://github.com/craig-m.keys
 
-# copy root's authorized_keys to this users
-cat /root/.ssh/authorized_keys >> /home/${DEPLOYUSER}/.ssh/authorized_keys
-
-mkdir /home/${DEPLOYUSER}/Downloads
-chmod 700 /home/${DEPLOYUSER}/Downloads
+mkdir -pv /home/${DEPLOYUSER}/{Downloads,setup}
+chmod 700 /home/${DEPLOYUSER}/{Downloads,setup}
 
 chmod 700 /home/${DEPLOYUSER}/
 chmod 700 /home/${DEPLOYUSER}/.ssh
 chmod 600 /home/${DEPLOYUSER}/.ssh/authorized_keys
 chown -R ${DEPLOYUSER}:${DEPLOYUSER} /home/${DEPLOYUSER}/.ssh
+
+# create a 5MB tmpfs
+if [ ! -f /mnt/ramstore/data/test.txt ]; then
+  mkdir -pv /mnt/ramstore;
+  mount -t tmpfs -o size=5m tmpfs /mnt/ramstore;
+	# these files exist in Volatile memory!
+  mkdir /mnt/ramstore/data;
+	chmod 770 /mnt/ramstore/data;
+	chown ${DEPLOYUSER}:root /mnt/ramstore/data
+  touch /mnt/ramstore/data/test.txt
+fi
 
 
 # install/upgrade programs #####################################################
@@ -257,6 +269,7 @@ apt-get install --assume-yes \
 	git \
 	rsync \
 	bc \
+	attr \
 	autoconf automake \
 	python-dev:any ruby-full \
 	libffi-dev \
@@ -268,21 +281,28 @@ apt-get install --assume-yes \
 	unzip \
 	uuid \
 	pass \
+	expect inotify-tools \
   monitoring-plugins-common monitoring-plugins-basic \
   apparmor apparmor-utils;
 
 
-# Install haveged, an unpredictable random number generator
+# install haveged, an unpredictable random number generator
 apt-get install -y haveged
 systemctl start haveged.service
 systemctl enable haveged.service
 /usr/lib/nagios/plugins/check_procs -C haveged 1:3
 
+# install fail2ban
+apt-get install -y fail2ban
+systemctl start fail2ban
+systemctl enable fail2ban
+/usr/lib/nagios/plugins/check_procs -C fail2ban-server 1:3
 
 # track uptimes
 apt-get install -y uptimed
 systemctl start uptimed.service
 systemctl enable uptimed.service
+/usr/lib/nagios/plugins/check_procs -C uptimed 1:3
 
 
 # Clean up #####################################################################
@@ -397,6 +417,9 @@ cat /proc/sys/kernel/random/entropy_avail
 # hide procs perm
 echo "proc /proc proc defaults,hidepid=2 0 0" >> /etc/fstab
 
+# no exec on shared mem
+# echo "tmpfs /dev/shm tmpfs defaults,noexec,nosuid 0 0" >> /etc/fstab
+
 # remove setuid
 chmod u-s /bin/ping
 chmod u-s /usr/bin/mtr
@@ -429,24 +452,27 @@ echo "StackScript started $thedate" >> $serverdeets
 
 # done #########################################################################
 
-
 # to be called via SSH after VM StackScript setup has been finished
 cat > /root/setup/setup_stage2.sh << EOF
 #!/bin/bash
-if [ ! -f /root/setup/.finished ]; then
+if [ ! -f /etc/stackscript ]; then
 	echo "error StackScript not finished" | logger;
 	exit 1;
 fi
-# do setup:
-# < to do >
-sleep 5m;
-# done:
-touch -f /root/setup/.setup_stage2;
+echo "starting stage2"
+# -- do further setup --
+sleep 10m;
+# -- done --
+setfattr -n user.crgmnet_stage2 -v "setup finished" /etc/stackscript
 logger "setup_stage2.sh is done";
-synch;
+sync;
 reboot;
 EOF
+
 chmod +x /root/setup/setup_stage2.sh
+
+# run "/root/setup/setup_stage2.sh" above when "/mnt/ramstore/data/stage2" is modified.
+nohup sh -c "while inotifywait -e modify /mnt/ramstore/data/stage2; do /root/setup/setup_stage2.sh; done &>/dev/null &"
 
 
 # Message Of The Day
@@ -460,28 +486,32 @@ cat > /etc/motd << EOF
                                                  ''
 EOF
 
-# free pagecache, dentries and inodes.
-sync;
-echo 3 > /proc/sys/vm/drop_caches;
-sync;
 
 # list installed packages and versions
 if [ ! -f /root/setup/packages ]; then
 	apt list --installed >> /root/setup/packages
 fi
 
+# free pagecache, dentries and inodes.
+sync;
+echo 3 > /proc/sys/vm/drop_caches;
+sync;
+
 
 # --- start sshd ! ---
-echo "Starting sshd"
+echo "Starting sshd (iptables whitelisted)"
 systemctl start sshd || echo "CRITICAL could not restart sshd"
 /usr/lib/nagios/plugins/check_ssh -p 22 localhost
 
 
 # -- script finished !! --
 SSFIN=$(date)
-if [ ! -f /root/setup/.finished ]; then
+if [ ! -f /etc/stackscript ]; then
 	echo "StackScript finished $SSFIN" >> $serverdeets
-	touch -f /root/setup/.finished
+	touch -f /etc/stackscript
+	# save info in extended file attributes
+	setfattr -n user.crgmnet_stackscript -v "setup finished" /etc/stackscript
+	setfattr -n user.crgmnet_ipw -v "${sshipwhitelist}" /etc/stackscript
 fi
 echo "[*] StackScript Finished" | logger;
 

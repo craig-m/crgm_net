@@ -1,6 +1,7 @@
 #!/bin/bash
 
-[[ ! -z "$vm_ip_whitelist" ]] || exit 1
+# get whitelisted IP (put here by stackscript)
+ipw=$(getfattr -n user.crgmnet_ipw /etc/stackscript | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b")
 
 # install
 apt-get install -y ufw;
@@ -12,7 +13,7 @@ ufw default deny incoming
 # inbound
 ufw allow 80/tcp
 ufw allow 443/tcp
-ufw allow from ${vm_ip_whitelist} to any port 22 proto tcp
+ufw allow from ${ipw} to any port 22 proto tcp
 
 # outbound ports
 ufw allow out 80,443/tcp # http/s

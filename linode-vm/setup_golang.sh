@@ -3,7 +3,7 @@
 cd ~/Downloads
 wget https://dl.google.com/go/go1.11.4.linux-amd64.tar.gz
 tar -xf -- go1.11.4.linux-amd64.tar.gz
-mv go/ /usr/local/
+sudo mv go/ /usr/local/
 
 mkdir ~/gopath/src
 

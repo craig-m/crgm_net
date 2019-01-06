@@ -1,8 +1,9 @@
 #!/bin/bash
 
+# varibles ---------------------------------------------------------------------
 # VARS are set in environment var (see readme.md)
 
-# check if vars set
+# check if vars have been set
 [[ ! -z "$vm_name" ]] || exit 1
 [[ ! -z "$vm_root_pw" ]] || exit 1
 [[ ! -z "$vm_username" ]] || exit 1
@@ -20,17 +21,16 @@ echo -e "env var: vm_ip_whitelist: $vm_ip_whitelist"
 echo -e "env var: stackscriptname: $stackscriptname"
 echo -e "\n"
 
-# pre-run tasks ----------------------------------------------------------------
-echo -e "\nPre run tasks:\n"
+# functions --------------------------------------------------------------------
 
-# create a temp file to store json payload
-echo "create temp file"
-script_temp_dir=$(mktemp -d)
-script_temp_file=$(uuid -F SIV | cut -b 10-25)
-touch -f $script_temp_dir/$script_temp_file
-chmod 600 $script_temp_dir/$script_temp_file
-tempjson="$script_temp_dir/$script_temp_file"
-
+apijson(){
+  # used when creating a linode
+  echo "Using temp json payload: "
+  script_temp_dir=$(mktemp -d)
+  script_temp_file=$(uuid -F SIV | cut -b 10-25)
+  touch -f $script_temp_dir/$script_temp_file
+  chmod 600 $script_temp_dir/$script_temp_file
+  tempjson="$script_temp_dir/$script_temp_file"
 cat > $tempjson << EOF
 {
    "deployuser":"${vm_username}",
@@ -38,6 +38,18 @@ cat > $tempjson << EOF
    "sshipwhitelist":"${vm_ip_whitelist}"
 }
 EOF
+  ls -la $tempjson
+}
+
+testsshup(){
+  # The stackscript will take a couple more min to complete,
+  # SSHD will be down until it finishes.
+  ssh -i /home/vagrant/.ssh/id_rsa_node \
+  -o ConnectTimeout=15 \
+  -o ConnectionAttempts=10 \
+  -o StrictHostKeyChecking=no \
+  ${vm_username}@${vm_ip_addr} uptime;
+}
 
 
 # Check StackScript exists - create is missing ---------------------------------
@@ -67,6 +79,8 @@ echo -e "\nVM:\n"
 linode-linode list -l ${vm_name} | grep -v "Couldn't find" | grep ${vm_name}
 if [ $? -eq 1 ]; then
   echo "creating new linode "
+  # temp json payload
+  apijson
   # create a new VPS!
   linode create $vm_name \
     --label $vm_name \
@@ -74,7 +88,7 @@ if [ $? -eq 1 ]; then
     --stackscript ${stackscriptname} \
     --password  ${vm_root_pw} \
     --pubkey-file /home/vagrant/.ssh/id_rsa_node.pub \
-    --stackscriptjson ${tempjson}
+    --stackscriptjson ${tempjson};
   # exit if provision fails
   if [ $? -eq 1 ]; then
     echo "failed to create linode!"
@@ -90,19 +104,8 @@ else
 fi
 
 
-# get VM IP
+# get VM IP from Linode API
 vm_ip_addr=$(linode-linode -a show --label ${vm_name} | tail -n2 | tr -d '\n' | awk '{print $2}')
-
-
-testsshup (){
-  # The stackscript will take a couple more min to complete,
-  # SSHD will be down until it finishes.
-  ssh -i /home/vagrant/.ssh/id_rsa_node \
-  -o ConnectTimeout=15 \
-  -o ConnectionAttempts=10 \
-  -o StrictHostKeyChecking=no \
-  ${vm_username}@${vm_ip_addr} uptime
-}
 
 
 # continue when SSH is up on VM
@@ -115,8 +118,10 @@ done
 # next stage of VM setup (if new)
 if [ true = $vm_created ]; then
   echo "calling stage2 of VM setup"
-  ssh -i /home/vagrant/.ssh/id_rsa_node -t ${vm_username}@${vm_ip_addr} \
-  'sudo screen -S stage2 -d -m /root/setup/setup_stage2.sh';
+  sleep 30s;
+  ssh -i /home/vagrant/.ssh/id_rsa_node -t \
+  ${vm_username}@${vm_ip_addr} \
+  hostname; echo true > /mnt/ramstore/data/stage2; id;
 else
   echo "NOT calling stage2"
 fi
