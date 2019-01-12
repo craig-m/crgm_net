@@ -16,11 +16,12 @@ cd ~/Downloads/
 wget https://git.kernel.org/pub/scm/linux/kernel/git/mricon/korg-helpers.git/plain/get-verified-tarball
 chmod +x get-verified-tarball
 gpg --list-keys
-./get-verified-tarball 4.20
+./get-verified-tarball 4.20.1
+gpg --list-keys
 
-xz -d -- linux-4.20.tar.xz
-tar -xf linux-4.20.tar
-cd linux-4.20
+xz -d -- linux-4.20.1.tar.xz
+tar -xf linux-4.20.1.tar
+cd linux-4.20.1
 
 # -- get current running kern config: --
 # zcat /proc/config.gz > .config
