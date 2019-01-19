@@ -420,6 +420,8 @@ echo "proc /proc proc defaults,hidepid=2 0 0" >> /etc/fstab
 # no exec on shared mem
 # echo "tmpfs /dev/shm tmpfs defaults,noexec,nosuid 0 0" >> /etc/fstab
 
+chmod 750 /boot/
+
 # remove setuid
 chmod u-s /bin/ping
 chmod u-s /usr/bin/mtr

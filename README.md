@@ -18,6 +18,7 @@ When I have more time available I will build something better and replace this s
 
 ### web stack
 * OS: https://www.debian.org/ (current stable is Stretch/9)
+* Kernel: current stable (with custom config)
 * Web server: https://www.nginx.com/
 * Web site: https://jekyllrb.com
 

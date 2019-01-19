@@ -1,7 +1,9 @@
 #!/bin/bash
 
+kernver="4.20.3";
+
 # build a custom kernel for Linode Linux VPS
-# tested on Debian GNU/Linux 9.6 (stretch) + Linux V 4.20
+# tested on Debian GNU/Linux 9.6 (stretch) + Linux $kernver
 
 sudo apt-get update
 sudo apt-get upgrade -y
@@ -16,12 +18,12 @@ cd ~/Downloads/
 wget https://git.kernel.org/pub/scm/linux/kernel/git/mricon/korg-helpers.git/plain/get-verified-tarball
 chmod +x get-verified-tarball
 gpg --list-keys
-./get-verified-tarball 4.20.1
+./get-verified-tarball ${kernver}
 gpg --list-keys
 
-xz -d -- linux-4.20.1.tar.xz
-tar -xf linux-4.20.1.tar
-cd linux-4.20.1
+xz -d -- linux-${kernver}.tar.xz
+tar -xf linux-${kernver}.tar
+cd linux-${kernver}
 
 # -- get current running kern config: --
 # zcat /proc/config.gz > .config
@@ -37,6 +39,7 @@ make
 
 sudo rm -rfv -- /boot/*
 sudo mkdir -pv /boot/grub/
+sudo chmod 750 /boot/
 
 sudo make install
 
