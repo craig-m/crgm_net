@@ -30,7 +30,7 @@ Vagrant.configure(VAGRANT_API_VER) do |config|
   config.vm.synced_folder ".", "/vagrant", owner: "vagrant", group: "vagrant"
 
   # provisioning script (as root user)
-  config.vm.provision :shell, :path => "Vagrantfile.sh", :privileged => true
+  config.vm.provision :shell, :path => "Vagrantfile_root.sh", :privileged => true
   # provisioning script (as vagrant user)
   config.vm.provision :shell, :path => "Vagrantfile_user.sh", :privileged => false
 

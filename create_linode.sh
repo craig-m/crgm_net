@@ -3,23 +3,28 @@
 # varibles ---------------------------------------------------------------------
 # VARS are set in environment var (see readme.md)
 
-# check if vars have been set
+echo -e "\nEnvironment varibles:\n"
+
+echo -e "env var: vm_name: $vm_name"
 [[ ! -z "$vm_name" ]] || exit 1
+
+echo -e "env var: vm_root_pw: $vm_root_pw"
 [[ ! -z "$vm_root_pw" ]] || exit 1
+
+echo -e "env var: vm_username: $vm_username"
 [[ ! -z "$vm_username" ]] || exit 1
+
+echo -e "env var: vm_user_pw: $vm_user_pw"
 [[ ! -z "$vm_user_pw" ]] || exit 1
+
+echo -e "env var: vm_ip_whitelist: $vm_ip_whitelist"
 [[ ! -z "$vm_ip_whitelist" ]] || exit 1
+
+echo -e "env var: stackscriptname: $stackscriptname"
 [[ ! -z "$stackscriptname" ]] || exit 1
 
-# show vars
-echo -e "\nEnvironment varibles:\n"
-echo -e "env var: vm_name: $vm_name"
-echo -e "env var: vm_root_pw: $vm_root_pw"
-echo -e "env var: vm_username: $vm_username"
-echo -e "env var: vm_user_pw: $vm_user_pw"
-echo -e "env var: vm_ip_whitelist: $vm_ip_whitelist"
-echo -e "env var: stackscriptname: $stackscriptname"
 echo -e "\n"
+
 
 # functions --------------------------------------------------------------------
 

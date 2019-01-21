@@ -18,7 +18,7 @@ When I have more time available I will build something better and replace this s
 
 ### web stack
 * OS: https://www.debian.org/ (current stable is Stretch/9)
-* Kernel: current stable (with custom config)
+* Kernel: https://www.kernel.org/ (current stable + custom config)
 * Web server: https://www.nginx.com/
 * Web site: https://jekyllrb.com
 
@@ -66,7 +66,8 @@ export vm_ip_whitelist="x.x.x.x"
 
 ## create linode
 
-If the VM is does not exist it will be created.
+If the VM with this name does not exist it will be created.
+
 ```
 vagrant@stretch:/vagrant$ ./create_linode.sh
 ```

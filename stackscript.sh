@@ -2,7 +2,6 @@
 
 # ------------------------------------------------------------------------------
 # crgm.net Linode StackScript for Debian 9 - base hosting setup.
-# Currently in somewhat of an alpha/beta state.
 # https://github.com/craig-m/crgm_net
 #
 # update stackscript:
@@ -48,6 +47,7 @@ echo "0" > /proc/sys/vm/swappiness
 # host info
 uname -a;
 uptime;
+lsb_release -a;
 thedate=$(date)
 # fetch info about this image:
 curl https://api.linode.com/v4/images/linode/debian9
@@ -218,6 +218,11 @@ echo "$DEPLOYUSER:$DEPLOYERUSERPASSWORD" | chpasswd
 usermod -aG sudo $DEPLOYUSER
 usermod -aG sshusers $DEPLOYUSER
 
+# since .bashrc looks for this file, lets create it
+touch -f /home/${DEPLOYUSER}/.bash_aliases
+chown ${DEPLOYUSER}:${DEPLOYUSER} /home/${DEPLOYUSER}/.bash_aliases
+chmod 400 /home/${DEPLOYUSER}/.bash_aliases
+
 # pub ssh key for user
 mkdir -p /home/${DEPLOYUSER}/.ssh
 touch /home/${DEPLOYUSER}/.ssh/authorized_keys
@@ -227,9 +232,11 @@ touch /home/${DEPLOYUSER}/.ssh/config
 cat /root/.ssh/authorized_keys >> /home/${DEPLOYUSER}/.ssh/authorized_keys
 # todo: maybe also add keys from https://github.com/craig-m.keys
 
+# user homedir folders
 mkdir -pv /home/${DEPLOYUSER}/{Downloads,setup}
 chmod 700 /home/${DEPLOYUSER}/{Downloads,setup}
 
+# ssh dir perms
 chmod 700 /home/${DEPLOYUSER}/
 chmod 700 /home/${DEPLOYUSER}/.ssh
 chmod 600 /home/${DEPLOYUSER}/.ssh/authorized_keys
@@ -283,6 +290,7 @@ apt-get install --assume-yes \
 	pass \
 	expect inotify-tools \
   monitoring-plugins-common monitoring-plugins-basic \
+	debsums \
   apparmor apparmor-utils;
 
 
@@ -334,57 +342,59 @@ apt-get install auditd -y
 systemctl enable auditd
 /usr/lib/nagios/plugins/check_procs -C auditd 1:3
 
-# some base auditd rules
+# auditd rules to monitor the server
 cat >> /etc/audit/rules.d/audit.rules << EOF
 ## Kernel module loading and unloading
 -a always,exit -F perm=x -F auid!=-1 -F path=/sbin/insmod -k modules
 -a always,exit -F perm=x -F auid!=-1 -F path=/sbin/modprobe -k modules
 -a always,exit -F perm=x -F auid!=-1 -F path=/sbin/rmmod -k modules
 -a always,exit -F arch=b64 -S finit_module -S init_module -S delete_module -F auid!=-1 -k modules
--a always,exit -F arch=b32 -S finit_module -S init_module -S delete_module -F auid!=-1 -k modules
 
-## Modprobe configuration
--w /etc/modprobe.conf -p wa -k modprobe
+## etc file changes
+-w /etc/modprobe.conf -p wa -k etcfiles
+-w /etc/ld.so.conf -p wa -k etcfiles
+-w /etc/ld.so.conf.d/libc.conf -p wa -k etcfiles
+-w /etc/ld.so.conf.d/x86_64-linux-gnu.conf -p wa -k etcfiles
+-w /etc/ld.so.conf.d/fakeroot-x86_64-linux-gnu.conf -p wa -k etcfiles
 
 ## KExec usage (all actions)
--a always,exit -F arch=b64 -S kexec_load -k KEXEC
--a always,exit -F arch=b32 -S sys_kexec_load -k KEXEC
+# -a always,exit -F arch=b64 -S kexec_load -k KEXEC
 
 ## Special files
--a exit,always -F arch=b32 -S mknod -S mknodat -k specialfiles
--a exit,always -F arch=b64 -S mknod -S mknodat -k specialfiles
+# -a exit,always -F arch=b64 -S mknod -S mknodat -k specialfiles
 
 ## Mount operations (only attributable)
 -a always,exit -F arch=b64 -S mount -S umount2 -F auid!=-1 -k mount
--a always,exit -F arch=b32 -S mount -S umount -S umount2 -F auid!=-1 -k mount
 
 # Change swap (only attributable)
 -a always,exit -F arch=b64 -S swapon -S swapoff -F auid!=-1 -k swap
--a always,exit -F arch=b32 -S swapon -S swapoff -F auid!=-1 -k swap
 
 ## User, group, password databases
--w /etc/group -p wa -k etcgroup
--w /etc/passwd -p wa -k etcpasswd
--w /etc/gshadow -k etcgroup
--w /etc/shadow -k etcpasswd
--w /etc/security/opasswd -k opasswd
+-w /etc/group -p wa -k etcfiles
+-w /etc/passwd -p wa -k etcfiles
+-w /etc/sudoers -p wa -k etcfiles
 
-## Sudoers file changes
--w /etc/sudoers -p wa -k actions
-
-## Passwd
--w /usr/bin/passwd -p x -k passwd_modification
+-w /etc/gshadow -k etcfiles
+-w /etc/shadow -k etcfiles
+-w /etc/security/opasswd -k etcfiles
 
 ## Suspicious activity
--w /usr/bin/wget -p x -k susp_exec
--w /usr/bin/curl -p x -k susp_exec
+-w /usr/bin/passwd -p x -k susp_exec
 -w /usr/bin/base64 -p x -k susp_exec
--w /bin/nc -p x -k susp_exec
--w /bin/netcat -p x -k susp_exec
--w /usr/bin/ncat -p x -k susp_exec
--w /usr/bin/ssh -p x -k susp_exec
--w /usr/bin/socat -p x -k susp_exec
+-w /usr/bin/od -p x -k susp_exec
 -w /usr/sbin/tcpdump -p x -k susp_exec
+-w /bin/busybox -p x -k susp_exec
+
+## network clients
+-w /usr/bin/wget -p x -k netcli_exec
+-w /usr/bin/curl -p x -k netcli_exec
+-w /bin/nc -p x -k netcli_exec
+-w /bin/netcat -p x -k netcli_exec
+-w /usr/bin/ncat -p x -k netcli_exec
+-w /usr/bin/ssh -p x -k netcli_exec
+-w /usr/bin/socat -p x -k netcli_exec
+-w /usr/bin/telnet -p x -k netcli_exec
+-w /usr/bin/whois -p x -k netcli_exec
 
 # ctf
 -w /root/ctf.txt -p war -k ctfwin
@@ -418,7 +428,7 @@ cat /proc/sys/kernel/random/entropy_avail
 echo "proc /proc proc defaults,hidepid=2 0 0" >> /etc/fstab
 
 # no exec on shared mem
-# echo "tmpfs /dev/shm tmpfs defaults,noexec,nosuid 0 0" >> /etc/fstab
+echo "tmpfs /dev/shm tmpfs defaults,noexec,nosuid 0 0" >> /etc/fstab
 
 chmod 750 /boot/
 
@@ -490,9 +500,7 @@ EOF
 
 
 # list installed packages and versions
-if [ ! -f /root/setup/packages ]; then
-	apt list --installed >> /root/setup/packages
-fi
+apt list --installed > /root/setup/packages
 
 # free pagecache, dentries and inodes.
 sync;
@@ -508,14 +516,13 @@ systemctl start sshd || echo "CRITICAL could not restart sshd"
 
 # -- script finished !! --
 SSFIN=$(date)
-if [ ! -f /etc/stackscript ]; then
-	echo "StackScript finished $SSFIN" >> $serverdeets
-	touch -f /etc/stackscript
-	# save info in extended file attributes
-	setfattr -n user.crgmnet_stackscript -v "setup finished" /etc/stackscript
-	setfattr -n user.crgmnet_ipw -v "${sshipwhitelist}" /etc/stackscript
-fi
+echo "StackScript finished $SSFIN" >> $serverdeets
+touch -f /etc/stackscript
+# save info in extended file attributes
+setfattr -n user.crgmnet_stackscript -v "setup finished" /etc/stackscript
+setfattr -n user.crgmnet_ipw -v "${sshipwhitelist}" /etc/stackscript
 echo "[*] StackScript Finished" | logger;
+chattr +i /etc/stackscript
 
 
 # EOF
