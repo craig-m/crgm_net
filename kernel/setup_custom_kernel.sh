@@ -7,6 +7,7 @@ if [ ! -f /etc/stackscript ]; then
   exit 1;
 fi
 
+export DEBIAN_FRONTEND=noninteractive;
 sudo apt-get update
 sudo apt-get upgrade -y
 

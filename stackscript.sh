@@ -16,6 +16,9 @@
 # <UDF name="deployuser" Label="non-root admin user for vm" example="deployer" />
 # <UDF name="deployeruserpassword" Label="admin user password" example="a_secret_sudo_pw" />
 # <UDF name="sshipwhitelist" Label="whitelist ipv4 on temp fw" example="1.2.3.4" />
+# <UDF name="vm_name" Label="vm_name" example="vm_name" />
+# <UDF name="github_user" Label="github_user" example="craig-m" />
+# <UDF name="github_repo" Label="github_repo" example="crgm_net" />
 
 
 # Init #########################################################################
@@ -29,8 +32,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # save deployment info here
 if [ ! -d /root/setup/ ]; then
 	mkdir -v /root/setup/;
-	mkdir -v /root/Downloads/;
-	uuid > /root/ctf.txt
+	uuid > /root/setup/ctf.txt
 fi
 
 # log all output from this script
@@ -40,9 +42,6 @@ exec 2>&1
 # stop sshd until we harden + update + setup users etc
 echo "Stopping sshd"
 systemctl stop sshd
-
-# reduce swappiness to 0 for setup - default is 60
-echo "0" > /proc/sys/vm/swappiness
 
 # host info
 uname -a;
@@ -61,31 +60,13 @@ mount -o remount,noexec,nosuid,nodev /dev/shm
 # increase ulimit
 ulimit -n 8192
 
+# reduce swappiness to 0 for setup - default is 60
+echo "0" > /proc/sys/vm/swappiness
 
-# Firewall + net ###############################################################
+
+# Firewall #####################################################################
 
 echo "[*] Firewall off host for setup";
-
-# Enable IP spoofing protection
-echo 1 > /proc/sys/net/ipv4/conf/all/rp_filter
-# syncookies on
-echo 1 > /proc/sys/net/ipv4/tcp_syncookies
-# log martion packets:
-echo 1 > /proc/sys/net/ipv4/conf/all/log_martians
-# Don't accept or send ICMP redirects
-echo 0 > /proc/sys/net/ipv4/conf/all/accept_redirects
-echo 0 > /proc/sys/net/ipv4/conf/all/bootp_relay
-# no ip forwarding (not a router)
-echo 0 > /proc/sys/net/ipv4/ip_forward
-# icmp ignored
-echo 1 > /proc/sys/net/ipv4/icmp_echo_ignore_all
-echo 1 > /proc/sys/net/ipv4/icmp_echo_ignore_broadcasts
-echo 1 > /proc/sys/net/ipv4/icmp_ignore_bogus_error_responses
-# Don't log invalid responses to broadcast frames
-echo 1 > /proc/sys/net/ipv4/icmp_ignore_bogus_error_responses
-# Disable proxy_arp
-echo 0 > /proc/sys/net/ipv4/conf/all/proxy_arp
-
 
 #---------------------- Firewall ----------------------
 # simple IPv4 whitelisted FW.
@@ -230,7 +211,6 @@ touch /home/${DEPLOYUSER}/.ssh/config
 
 # copy root's authorized_keys to this users (these are removed later)
 cat /root/.ssh/authorized_keys >> /home/${DEPLOYUSER}/.ssh/authorized_keys
-# todo: maybe also add keys from https://github.com/craig-m.keys
 
 # user homedir folders
 mkdir -pv /home/${DEPLOYUSER}/{Downloads,setup}
@@ -242,6 +222,9 @@ chmod 700 /home/${DEPLOYUSER}/.ssh
 chmod 600 /home/${DEPLOYUSER}/.ssh/authorized_keys
 chown -R ${DEPLOYUSER}:${DEPLOYUSER} /home/${DEPLOYUSER}/.ssh
 
+# add pub keys from github
+sudo -u ${DEPLOYUSER} /usr/bin/curl https://github.com/${github_user}.keys >> /home/${DEPLOYUSER}/.ssh/authorized_keys
+
 # create a 5MB tmpfs
 if [ ! -f /mnt/ramstore/data/test.txt ]; then
   mkdir -pv /mnt/ramstore;
@@ -252,6 +235,27 @@ if [ ! -f /mnt/ramstore/data/test.txt ]; then
 	chown ${DEPLOYUSER}:root /mnt/ramstore/data
   touch /mnt/ramstore/data/test.txt
 fi
+
+cat >> /home/${DEPLOYUSER}/.screenrc << EOF
+# ~/.screenrc
+caption always "%{= bb}%{+b w}%h ${USER}@%H %= %c %{=b rw} %l %{= db}%{= dg}"
+hardstatus alwayslastline "%-Lw%{= BW}%50>%n%f* %t%{-}%+Lw%<"
+startup_message off
+chdir
+autodetach on
+defscrollback 10000
+vbell on
+vbell_msg "bell on %t (%n)"
+activity "Activity in %t(%n)"
+shelltitle "shell"
+shell -$SHELL
+EOF
+chown ${DEPLOYUSER}:${DEPLOYUSER} /home/${DEPLOYUSER}/.screenrc
+
+# setup ruby env
+echo '# Install Ruby Gems to ~/gems' >> /home/${DEPLOYUSER}/.bashrc
+echo 'export GEM_HOME="$HOME/gems"' >> /home/${DEPLOYUSER}/.bashrc
+echo 'export PATH="$HOME/gems/bin:$PATH"' >> /home/${DEPLOYUSER}/.bashrc
 
 
 # install/upgrade programs #####################################################
@@ -286,6 +290,7 @@ apt-get install --assume-yes \
 	dtach \
 	tcpdump \
 	unzip \
+	exiftool steghide \
 	uuid \
 	pass \
 	expect inotify-tools \
@@ -397,7 +402,7 @@ cat >> /etc/audit/rules.d/audit.rules << EOF
 -w /usr/bin/whois -p x -k netcli_exec
 
 # ctf
--w /root/ctf.txt -p war -k ctfwin
+-w /root/setup/ctf.txt -p war -k ctfwin
 EOF
 
 service auditd restart
@@ -408,11 +413,11 @@ auditctl -l | wc -l
 # misc hardening ###############################################################
 
 # apparmor enabled on boot
-if [ ! -f /root/setup/apparmor ]; then
+if [ ! -f /root/setup/.apparmor ]; then
 	echo "[*] enable apparmor on boot ";
 	perl -pi -e 's,GRUB_CMDLINE_LINUX="(.*)"$,GRUB_CMDLINE_LINUX=" $1 apparmor=1 security=apparmor",' /etc/default/grub
 	/usr/sbin/update-grub
-	touch -f /root/setup/apparmor
+	touch -f /root/setup/.apparmor
 fi
 
 # regenerate sshd host keys
@@ -428,15 +433,41 @@ cat /proc/sys/kernel/random/entropy_avail
 echo "proc /proc proc defaults,hidepid=2 0 0" >> /etc/fstab
 
 # no exec on shared mem
-echo "tmpfs /dev/shm tmpfs defaults,noexec,nosuid 0 0" >> /etc/fstab
+echo "tmpfs /dev/shm tmpfs rw,nodev,nosuid,noexec,mode=1777 0 0" >> /etc/fstab
 
 chmod 750 /boot/
 
-# remove setuid
+# remove setuid bit on:
 chmod u-s /bin/ping
 chmod u-s /usr/bin/mtr
 chmod u-s /bin/mount
 chmod u-s /bin/unmount
+
+# sysctl.conf
+sed -i 's/#net.ipv4.conf.default.rp_filter=1/net.ipv4.conf.default.rp_filter=1/' /etc/sysctl.conf
+sed -i 's/#net.ipv4.conf.all.rp_filter=1/net.ipv4.conf.all.rp_filter=1/' /etc/sysctl.conf
+sed -i 's/#net.ipv4.tcp_syncookies=1/net.ipv4.tcp_syncookies=1/' /etc/sysctl.conf
+sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=0/' /etc/sysctl.conf
+sed -i 's/#net.ipv6.conf.all.forwarding=1/net.ipv6.conf.all.forwarding=0/' /etc/sysctl.conf
+sed -i 's/#net.ipv4.conf.all.accept_redirects = 0/net.ipv4.conf.all.accept_redirects = 0/' /etc/sysctl.conf
+sed -i 's/#net.ipv6.conf.all.accept_redirects = 0/net.ipv6.conf.all.accept_redirects = 0/' /etc/sysctl.conf
+sed -i 's/#kernel.sysrq=1/kernel.sysrq=0/' /etc/sysctl.conf
+sed -i 's/#fs.protected_hardlinks=0/fs.protected_hardlinks=1/' /etc/sysctl.conf
+sed -i 's/#fs.protected_symlinks=0/fs.protected_symlinks=1/' /etc/sysctl.conf
+
+echo "kernel.core_uses_pid = 1" >> /etc/sysctl.conf
+echo "kernel.dmesg_restrict = 1" >> /etc/sysctl.conf
+echo "kernel.kptr_restrict = 1" >> /etc/sysctl.conf
+echo "kernel.yama.ptrace_scope = 1" >> /etc/sysctl.conf
+echo "kernel.perf_event_paranoid = 2" >> /etc/sysctl.conf
+echo "user.max_user_namespaces = 0" >> /etc/sysctl.conf
+echo "fs.file-max = 65535" >> /etc/sysctl.conf
+echo "kernel.pid_max = 65536" >> /etc/sysctl.conf
+echo "net.ipv4.ip_local_port_range = 2000 65000" >> /etc/sysctl.conf
+
+chattr +i /etc/sysctl.conf
+# reload sysctl config
+sysctl -p /etc/sysctl.conf
 
 
 # Gather server info ###########################################################
@@ -464,28 +495,6 @@ echo "StackScript started $thedate" >> $serverdeets
 
 # done #########################################################################
 
-# to be called via SSH after VM StackScript setup has been finished
-cat > /root/setup/setup_stage2.sh << EOF
-#!/bin/bash
-if [ ! -f /etc/stackscript ]; then
-	echo "error StackScript not finished" | logger;
-	exit 1;
-fi
-echo "starting stage2"
-# -- do further setup --
-sleep 10m;
-# -- done --
-setfattr -n user.crgmnet_stage2 -v "setup finished" /etc/stackscript
-logger "setup_stage2.sh is done";
-sync;
-reboot;
-EOF
-
-chmod +x /root/setup/setup_stage2.sh
-
-# run "/root/setup/setup_stage2.sh" above when "/mnt/ramstore/data/stage2" is modified.
-nohup sh -c "while inotifywait -e modify /mnt/ramstore/data/stage2; do /root/setup/setup_stage2.sh; done &>/dev/null &"
-
 
 # Message Of The Day
 cat > /etc/motd << EOF
@@ -508,6 +517,9 @@ echo 3 > /proc/sys/vm/drop_caches;
 sync;
 
 
+# git clone https://github.com/${github_user}/${github_repo}.git
+
+
 # --- start sshd ! ---
 echo "Starting sshd (iptables whitelisted)"
 systemctl start sshd || echo "CRITICAL could not restart sshd"
@@ -520,6 +532,8 @@ echo "StackScript finished $SSFIN" >> $serverdeets
 touch -f /etc/stackscript
 # save info in extended file attributes
 setfattr -n user.crgmnet_stackscript -v "setup finished" /etc/stackscript
+setfattr -n user.crgmnet_vmname -v "${vm_name}" /etc/stackscript
+setfattr -n user.crgmnet_user -v "${DEPLOYUSER}" /etc/stackscript
 setfattr -n user.crgmnet_ipw -v "${sshipwhitelist}" /etc/stackscript
 echo "[*] StackScript Finished" | logger;
 chattr +i /etc/stackscript

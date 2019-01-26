@@ -4,6 +4,7 @@
 ipw=$(getfattr -n user.crgmnet_ipw /etc/stackscript | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b")
 
 # install
+export DEBIAN_FRONTEND=noninteractive;
 apt-get install -y ufw;
 
 # default
@@ -22,6 +23,7 @@ ufw allow out 53,123/udp # dns, ntp
 ufw allow out 67,68/udp # dhcp
 
 # enable
+systemctl enable ufw
 ufw enable
 ufw logging on
 ufw status

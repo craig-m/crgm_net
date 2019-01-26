@@ -64,10 +64,17 @@ export vm_ip_whitelist="x.x.x.x"
 ```
 
 
-## create linode
+## deploy virtual machine
 
-If the VM with this name does not exist it will be created.
+To create a new linode:
 
 ```
-vagrant@stretch:/vagrant$ ./create_linode.sh
+vagrant@stretch:/vagrant$ ./create_linode.sh create
+```
+
+
+To rebuild an existing linode:
+
+```
+vagrant@stretch:/vagrant$ ./create_linode.sh recreate
 ```
