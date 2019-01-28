@@ -21,7 +21,6 @@ systemctl stop nginx
 rm -rfv /etc/nginx/sites-enabled/default
 
 mkdir -pv /var/www/${webdomain}/htdocs
-
 cat > /etc/nginx/sites-enabled/crgm << EOF
 server {
   server_name ${webdomain}.${webtld} www.${webdomain}.${webtld};
@@ -31,6 +30,19 @@ server {
 }
 EOF
 
+mkdir -pv /var/www/ip/htdocs
+cat > /etc/nginx/sites-enabled/ip << EOF
+server {
+  server_name _;
+  root /var/www/default/htdocs;
+  index index.html;
+  autoindex off;
+}
+EOF
+cat > /var/www/ip/htdocs/index.html << EOF
+x
+EOF
+
 systemctl restart nginx
 systemctl enable nginx
 
@@ -38,8 +50,10 @@ certbot --nginx -d ${webdomain}.${webtld} -d www.${webdomain}.${webtld}
 
 # certbot renew --dry-run
 
+# AppArmor profile for nginx
+
 cat > /etc/apparmor.d/usr.sbin.nginx << EOF
-# Last Modified: Sat Jan 26 22:02:01 2019
+# Last Modified: Sat Jan 28 03:10:54 2019
 #include <tunables/global>
 
 /usr/sbin/nginx {
@@ -60,18 +74,20 @@ cat > /etc/apparmor.d/usr.sbin.nginx << EOF
   /etc/nginx/modules-enabled/ r,
   /etc/nginx/nginx.conf r,
   /etc/nginx/sites-enabled/ r,
-  /etc/nginx/sites-enabled/* r,
+  /etc/nginx/sites-enabled/ip r,
+  /etc/nginx/sites-enabled/crgm r,
   /etc/nsswitch.conf r,
   /etc/passwd r,
   /etc/ssl/openssl.cnf r,
   /lib/x86_64-linux-gnu/ld-*.so mr,
   /run/nginx.pid rw,
-  /usr/lib/nginx/modules/* mr,
+  /usr/lib/nginx/modules/ngx_*.so mr,
   /usr/sbin/nginx mr,
-  /usr/share/nginx/modules-available/* r,
+  /usr/share/nginx/modules-available/mod-*.conf r,
   /var/log/nginx/access.log w,
   /var/log/nginx/error.log w,
   /var/www/${webdomain}/htdocs/** r,
+  /var/www/ip/htdocs/** r,
 
 }
 EOF

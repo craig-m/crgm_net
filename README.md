@@ -17,9 +17,9 @@ When I have more time available I will build something better and replace this s
 * TLS: https://letsencrypt.org/
 
 ### web stack
-* OS: https://www.debian.org/ (current stable is Stretch/9)
-* Kernel: https://www.kernel.org/ (current stable + custom config)
-* Web server: https://www.nginx.com/
+* OS: https://www.debian.org/ (current stable)
+* Kernel: https://www.kernel.org/ (current stable with custom config)
+* Web server: https://www.nginx.com/ (run under AppArmor profile)
 * Web site: https://jekyllrb.com
 
 ### local environment
@@ -42,10 +42,10 @@ vagrant ssh
 linode configure
 ```
 
-* skip 'distribution' question (Debian 9 is used).
+* Can skip distribution question (Debian 9 is used).
 * pick a datacenter.
-* I use a the `1 - Nanode 1GB` ($5 monthly) - Option 1.
-* Skip `Path to an SSH public` option.
+* I use a the 1 - Nanode 1GB ($5 monthly) - Option 1.
+* Skip "Path to an SSH public" option.
 
 Config will be saved at `/home/vagrant/.linodecli/config`
 
