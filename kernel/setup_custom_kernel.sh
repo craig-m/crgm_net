@@ -1,19 +1,11 @@
 #!/bin/bash
 
-kernver="4.20.5";
+kernver="4.20.7";
 
 if [ ! -f /etc/stackscript ]; then
   echo "error: stackscript did not run on linode";
   exit 1;
 fi
-
-export DEBIAN_FRONTEND=noninteractive;
-sudo apt-get update
-sudo apt-get upgrade -y
-
-sudo apt-get install -y \
-  build-essential libncurses5-dev gcc flex bison bc \
-  grub2 gpgv2 dirmngr libssl-dev libfl-dev libelf-dev gcc-6-plugin-dev;
 
 mkdir -pv ~/Downloads/
 cd ~/Downloads/

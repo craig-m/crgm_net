@@ -47,11 +47,9 @@ systemctl restart nginx
 systemctl enable nginx
 
 certbot --nginx -d ${webdomain}.${webtld} -d www.${webdomain}.${webtld}
-
 # certbot renew --dry-run
 
 # AppArmor profile for nginx
-
 cat > /etc/apparmor.d/usr.sbin.nginx << EOF
 # Last Modified: Sat Jan 28 03:10:54 2019
 #include <tunables/global>
@@ -67,6 +65,7 @@ cat > /etc/apparmor.d/usr.sbin.nginx << EOF
   /etc/group r,
   /etc/letsencrypt/archive/${webdomain}.${webtld}/fullchain1.pem r,
   /etc/letsencrypt/archive/${webdomain}.${webtld}/privkey1.pem r,
+  /etc/letsencrypt/le_http_01_cert_challenge.conf r,
   /etc/letsencrypt/options-ssl-nginx.conf r,
   /etc/letsencrypt/ssl-dhparams.pem r,
   /etc/nginx/conf.d/ r,
@@ -93,5 +92,6 @@ cat > /etc/apparmor.d/usr.sbin.nginx << EOF
 EOF
 
 systemctl reload apparmor
+
 
 echo "done"

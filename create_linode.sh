@@ -12,13 +12,13 @@ echo -e "\nEnvironment varibles (will exit if unset):\n"
 echo -e "env var: vm_name: $vm_name"
 [[ ! -z "$vm_name" ]] || exit 1
 
-echo -e "env var: vm_root_pw: $vm_root_pw"
+echo -e "env var: vm_root_pw: \$vm_root_pw"
 [[ ! -z "$vm_root_pw" ]] || exit 1
 
 echo -e "env var: vm_username: $vm_username"
 [[ ! -z "$vm_username" ]] || exit 1
 
-echo -e "env var: vm_user_pw: $vm_user_pw"
+echo -e "env var: vm_user_pw: \$vm_user_pw"
 [[ ! -z "$vm_user_pw" ]] || exit 1
 
 echo -e "env var: vm_ip_whitelist: $vm_ip_whitelist"
@@ -47,9 +47,7 @@ cat > $tempjson << EOF
    "deployuser":"${vm_username}",
    "deployeruserpassword":"${vm_user_pw}",
    "sshipwhitelist":"${vm_ip_whitelist}",
-   "vm_name":"${vm_name}",
-   "github_user":"craig-m",
-   "github_repo":"crgm_net"
+   "vm_name":"${vm_name}"
 }
 EOF
   ls -la $tempjson

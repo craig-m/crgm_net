@@ -17,8 +17,6 @@
 # <UDF name="deployeruserpassword" Label="admin user password" example="a_secret_sudo_pw" />
 # <UDF name="sshipwhitelist" Label="whitelist ipv4 on temp fw" example="1.2.3.4" />
 # <UDF name="vm_name" Label="vm_name" example="vm_name" />
-# <UDF name="github_user" Label="github_user" example="craig-m" />
-# <UDF name="github_repo" Label="github_repo" example="crgm_net" />
 
 
 # Init #########################################################################
@@ -26,20 +24,23 @@
 # start
 set -o verbose
 echo "Starting Stackscript" | logger
-# reset path
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # save deployment info here
 if [ ! -d /root/setup/ ]; then
 	mkdir -v /root/setup/;
-	uuid > /root/setup/ctf.txt
+	# unique token in this capture the flag file ;)
+	cat /proc/sys/kernel/random/uuid > /root/setup/ctf.txt
+else
+	echo "ERROR: stackscript has already run";
+	exit 1;
 fi
 
-# log all output from this script
+# log all output from this script to:
 exec > >(tee /root/setup/stackscript.log)
 exec 2>&1
 
-# stop sshd until we harden + update + setup users etc
+# Stop SSHD !!
+# until we harden + update + setup users etc
 echo "Stopping sshd"
 systemctl stop sshd
 
@@ -57,6 +58,8 @@ mount -o remount,rw,hidepid=2 /proc
 # Remount /dev/shm noexec
 mount -o remount,noexec,nosuid,nodev /dev/shm
 
+sysctl -w kernel.modules_disabled=1
+
 # increase ulimit
 ulimit -n 8192
 
@@ -64,7 +67,7 @@ ulimit -n 8192
 echo "0" > /proc/sys/vm/swappiness
 
 
-# Firewall #####################################################################
+# Firewall (ip whitelist) ######################################################
 
 echo "[*] Firewall off host for setup";
 
@@ -184,61 +187,18 @@ sed -i 's/AcceptEnv/#AcceptEnv/' /etc/ssh/sshd_config
 
 # group for ssh users
 groupadd sshusers
-echo " " >> /etc/ssh/sshd_config
+echo "# only the users in sshusers group have access:" >> /etc/ssh/sshd_config
 echo "AllowGroups sshusers" >> /etc/ssh/sshd_config
 
 
 # add non-root user ############################################################
 
-echo "[*] create a non-root user that has sudo";
+echo "[*] create a non-root user that has [passworded] sudo";
 
-adduser $DEPLOYUSER --force-badname --disabled-password --gecos ""
-echo "$DEPLOYUSER:$DEPLOYERUSERPASSWORD" | chpasswd
-
-# add to groups
-usermod -aG sudo $DEPLOYUSER
-usermod -aG sshusers $DEPLOYUSER
-
-# since .bashrc looks for this file, lets create it
-touch -f /home/${DEPLOYUSER}/.bash_aliases
-chown ${DEPLOYUSER}:${DEPLOYUSER} /home/${DEPLOYUSER}/.bash_aliases
-chmod 400 /home/${DEPLOYUSER}/.bash_aliases
-
-# pub ssh key for user
-mkdir -p /home/${DEPLOYUSER}/.ssh
-touch /home/${DEPLOYUSER}/.ssh/authorized_keys
-touch /home/${DEPLOYUSER}/.ssh/config
-
-# copy root's authorized_keys to this users (these are removed later)
-cat /root/.ssh/authorized_keys >> /home/${DEPLOYUSER}/.ssh/authorized_keys
-
-# user homedir folders
-mkdir -pv /home/${DEPLOYUSER}/{Downloads,setup}
-chmod 700 /home/${DEPLOYUSER}/{Downloads,setup}
-
-# ssh dir perms
-chmod 700 /home/${DEPLOYUSER}/
-chmod 700 /home/${DEPLOYUSER}/.ssh
-chmod 600 /home/${DEPLOYUSER}/.ssh/authorized_keys
-chown -R ${DEPLOYUSER}:${DEPLOYUSER} /home/${DEPLOYUSER}/.ssh
-
-# add pub keys from github
-sudo -u ${DEPLOYUSER} /usr/bin/curl https://github.com/${github_user}.keys >> /home/${DEPLOYUSER}/.ssh/authorized_keys
-
-# create a 5MB tmpfs
-if [ ! -f /mnt/ramstore/data/test.txt ]; then
-  mkdir -pv /mnt/ramstore;
-  mount -t tmpfs -o size=5m tmpfs /mnt/ramstore;
-	# these files exist in Volatile memory!
-  mkdir /mnt/ramstore/data;
-	chmod 770 /mnt/ramstore/data;
-	chown ${DEPLOYUSER}:root /mnt/ramstore/data
-  touch /mnt/ramstore/data/test.txt
-fi
-
-cat >> /home/${DEPLOYUSER}/.screenrc << EOF
+# create /etc/skel files
+cat >> /etc/skel/.screenrc << EOF
 # ~/.screenrc
-caption always "%{= bb}%{+b w}%h ${USER}@%H %= %c %{=b rw} %l %{= db}%{= dg}"
+caption always "%{= bb}%{+b w}%h %u@%H %= %c %{=b rw} %l %{= db}%{= dg}"
 hardstatus alwayslastline "%-Lw%{= BW}%50>%n%f* %t%{-}%+Lw%<"
 startup_message off
 chdir
@@ -250,7 +210,45 @@ activity "Activity in %t(%n)"
 shelltitle "shell"
 shell -$SHELL
 EOF
-chown ${DEPLOYUSER}:${DEPLOYUSER} /home/${DEPLOYUSER}/.screenrc
+
+touch /etc/skel/.bash_aliasess
+
+# make the user + password it
+adduser $DEPLOYUSER --force-badname --disabled-password --gecos ""
+echo "$DEPLOYUSER:$DEPLOYERUSERPASSWORD" | chpasswd
+
+# add to groups
+usermod -aG sudo $DEPLOYUSER
+usermod -aG sshusers $DEPLOYUSER
+
+# pub ssh key for user
+mkdir -p --mode=700 /home/${DEPLOYUSER}/.ssh
+touch /home/${DEPLOYUSER}/.ssh/authorized_keys
+touch /home/${DEPLOYUSER}/.ssh/config
+
+# copy root's authorized_keys (added by linode stackscript) to this users (these are removed later)
+cat /root/.ssh/authorized_keys >> /home/${DEPLOYUSER}/.ssh/authorized_keys
+
+# user homedir folders
+mkdir -pv --mode=700 /home/${DEPLOYUSER}/Downloads
+
+# ssh dir perms
+chmod 700 /home/${DEPLOYUSER}/
+chmod 600 /home/${DEPLOYUSER}/.ssh/authorized_keys
+chown -R ${DEPLOYUSER}:${DEPLOYUSER} /home/${DEPLOYUSER}/.ssh
+
+# add pub keys from github
+sudo -u ${DEPLOYUSER} /usr/bin/curl https://github.com/${github_user}.keys >> /home/${DEPLOYUSER}/.ssh/authorized_keys
+
+# create a 5MB tmpfs
+if [ ! -f /mnt/ramstore/data/test.txt ]; then
+  mkdir -pv /mnt/ramstore;
+  mount -t tmpfs -o size=5m tmpfs /mnt/ramstore;
+	# these files exist in Volatile memory!
+  mkdir --mode=770 /mnt/ramstore/data;
+	chown ${DEPLOYUSER}:root /mnt/ramstore/data
+  touch /mnt/ramstore/data/test.txt
+fi
 
 # setup ruby env
 echo '# Install Ruby Gems to ~/gems' >> /home/${DEPLOYUSER}/.bashrc
@@ -274,8 +272,8 @@ apt-get install --assume-yes \
 	sudo \
 	net-tools \
 	build-essential \
-	libncurses5-dev \
-	bison \
+	libncurses5-dev libfl-dev libelf-dev \
+	bison gcc gcc-6-plugin-dev flex \
 	libssl-dev libcurl4-openssl-dev \
 	git \
 	rsync \
@@ -296,7 +294,9 @@ apt-get install --assume-yes \
 	expect inotify-tools \
   monitoring-plugins-common monitoring-plugins-basic \
 	debsums \
-  apparmor apparmor-utils;
+	bats \
+  apparmor apparmor-utils \
+	grub2 gpgv2 dirmngr;
 
 
 # install haveged, an unpredictable random number generator
@@ -318,28 +318,28 @@ systemctl enable uptimed.service
 /usr/lib/nagios/plugins/check_procs -C uptimed 1:3
 
 
-# Clean up #####################################################################
+# ssh keys #####################################################################
 
-echo "[*] clean up debian base";
-
-# Remove unwated packages (still needed?)
-apt-get remove avahi-daemon -y
-update-rc.d nfs-common disable
-update-rc.d rpcbind disable
-service nfs-common stop
-service rpcbind stop
+echo "[*] deal with ssh keys";
 
 # remove sshd host keys
-rm -v /etc/ssh/ssh_host_dsa_key
 rm -v /etc/ssh/ssh_host_rsa_key
 rm -v /etc/ssh/ssh_host_ecdsa_key
+
+# regenerate sshd host keys
+echo "entropy_avail before keygen:"
+cat /proc/sys/kernel/random/entropy_avail
+ssh-keygen -t rsa -N "" -f /etc/ssh/ssh_host_rsa_key
+ssh-keygen -t ecdsa -N "" -f /etc/ssh/ssh_host_ecdsa_key
+echo "entropy_avail after keygen:"
+cat /proc/sys/kernel/random/entropy_avail
 
 # remove root authorized_keys
 echo "" > /root/.ssh/authorized_keys
 chattr +i /root/.ssh/authorized_keys
 
 
-# Monitoring + logging #########################################################
+# auditd #######################################################################
 
 echo "[*] setup auditd";
 
@@ -349,21 +349,31 @@ systemctl enable auditd
 
 # auditd rules to monitor the server
 cat >> /etc/audit/rules.d/audit.rules << EOF
-## Kernel module loading and unloading
--a always,exit -F perm=x -F auid!=-1 -F path=/sbin/insmod -k modules
--a always,exit -F perm=x -F auid!=-1 -F path=/sbin/modprobe -k modules
--a always,exit -F perm=x -F auid!=-1 -F path=/sbin/rmmod -k modules
--a always,exit -F arch=b64 -S finit_module -S init_module -S delete_module -F auid!=-1 -k modules
-
 ## etc file changes
--w /etc/modprobe.conf -p wa -k etcfiles
+-w /etc/ssh/sshd_config -p wa -k etcfiles
+-w /etc/sysctl.conf -p wa -k etcfiles
+-w /etc/hosts -p wa -k etcfiles
 -w /etc/ld.so.conf -p wa -k etcfiles
 -w /etc/ld.so.conf.d/libc.conf -p wa -k etcfiles
 -w /etc/ld.so.conf.d/x86_64-linux-gnu.conf -p wa -k etcfiles
 -w /etc/ld.so.conf.d/fakeroot-x86_64-linux-gnu.conf -p wa -k etcfiles
 
-## KExec usage (all actions)
-# -a always,exit -F arch=b64 -S kexec_load -k KEXEC
+# cron
+-w /var/spool/cron/crontabs/ -p wa -k crontab
+-w /etc/crontab -p wa -k crontab
+-w /etc/cron.allow -p wa -k crontab
+-w /etc/cron.deny -p wa -k crontab
+-w /etc/cron.daily/ -p wa -k crontab
+-w /etc/cron.hourly/ -p wa -k crontab
+-w /etc/cron.weekly/ -p wa -k crontab
+-w /etc/cron.monthly/ -p wa -k crontab
+
+## Kernel module loading and unloading
+-w /etc/modprobe.conf -p wa -k etcfiles
+-a always,exit -F perm=x -F auid!=-1 -F path=/sbin/insmod -k modules
+-a always,exit -F perm=x -F auid!=-1 -F path=/sbin/modprobe -k modules
+-a always,exit -F perm=x -F auid!=-1 -F path=/sbin/rmmod -k modules
+-a always,exit -F arch=b64 -S finit_module -S init_module -S delete_module -F auid!=-1 -k modules
 
 ## Special files
 # -a exit,always -F arch=b64 -S mknod -S mknodat -k specialfiles
@@ -378,10 +388,14 @@ cat >> /etc/audit/rules.d/audit.rules << EOF
 -w /etc/group -p wa -k etcfiles
 -w /etc/passwd -p wa -k etcfiles
 -w /etc/sudoers -p wa -k etcfiles
-
 -w /etc/gshadow -k etcfiles
 -w /etc/shadow -k etcfiles
 -w /etc/security/opasswd -k etcfiles
+
+# sudo
+-w /bin/su -p x -k sudo
+-w /usr/bin/sudo -p x -k sudo
+-w /etc/sudoers -p rw -k sudo
 
 ## Suspicious activity
 -w /usr/bin/passwd -p x -k susp_exec
@@ -420,28 +434,23 @@ if [ ! -f /root/setup/.apparmor ]; then
 	touch -f /root/setup/.apparmor
 fi
 
-# regenerate sshd host keys
-echo "entropy_avail before keygen:"
-cat /proc/sys/kernel/random/entropy_avail
-ssh-keygen -t dsa -N "" -f /etc/ssh/ssh_host_dsa_key
-ssh-keygen -t rsa -N "" -f /etc/ssh/ssh_host_rsa_key
-ssh-keygen -t ecdsa -N "" -f /etc/ssh/ssh_host_ecdsa_key
-echo "entropy_avail after keygen:"
-cat /proc/sys/kernel/random/entropy_avail
-
 # hide procs perm
 echo "proc /proc proc defaults,hidepid=2 0 0" >> /etc/fstab
 
 # no exec on shared mem
 echo "tmpfs /dev/shm tmpfs rw,nodev,nosuid,noexec,mode=1777 0 0" >> /etc/fstab
 
-chmod 750 /boot/
+# boot dir perms
+chmod 700 /boot/
+
+# no kernel modules
+echo 'kernel.modules_disabled=1' >> /etc/sysctl.d/99-custom.conf
 
 # remove setuid bit on:
 chmod u-s /bin/ping
 chmod u-s /usr/bin/mtr
 chmod u-s /bin/mount
-chmod u-s /bin/unmount
+chmod u-s /bin/umount
 
 # sysctl.conf
 sed -i 's/#net.ipv4.conf.default.rp_filter=1/net.ipv4.conf.default.rp_filter=1/' /etc/sysctl.conf
@@ -455,8 +464,11 @@ sed -i 's/#kernel.sysrq=1/kernel.sysrq=0/' /etc/sysctl.conf
 sed -i 's/#fs.protected_hardlinks=0/fs.protected_hardlinks=1/' /etc/sysctl.conf
 sed -i 's/#fs.protected_symlinks=0/fs.protected_symlinks=1/' /etc/sysctl.conf
 
+echo -e "\n# added tuning options:" >> /etc/sysctl.conf
+echo "fs.suid_dumpable = 0" >> /etc/sysctl.conf
 echo "kernel.core_uses_pid = 1" >> /etc/sysctl.conf
 echo "kernel.dmesg_restrict = 1" >> /etc/sysctl.conf
+echo "kernel.randomize_va_space = 2" >> /etc/sysctl.conf
 echo "kernel.kptr_restrict = 1" >> /etc/sysctl.conf
 echo "kernel.yama.ptrace_scope = 1" >> /etc/sysctl.conf
 echo "kernel.perf_event_paranoid = 2" >> /etc/sysctl.conf
@@ -465,8 +477,10 @@ echo "fs.file-max = 65535" >> /etc/sysctl.conf
 echo "kernel.pid_max = 65536" >> /etc/sysctl.conf
 echo "net.ipv4.ip_local_port_range = 2000 65000" >> /etc/sysctl.conf
 
+# set immutable
 chattr +i /etc/sysctl.conf
-# reload sysctl config
+
+# reload sysctl config:
 sysctl -p /etc/sysctl.conf
 
 
@@ -481,7 +495,6 @@ IPADDR=$(/sbin/ifconfig eth0 | awk '/inet / { print $2 }' | sed 's/addr://')
 echo "My IP $IPADDR" >> $serverdeets
 
 # get ssh keys
-ssh-keygen -l -f /etc/ssh/ssh_host_dsa_key >> $serverdeets
 ssh-keygen -l -f /etc/ssh/ssh_host_rsa_key >> $serverdeets
 ssh-keygen -l -f /etc/ssh/ssh_host_ecdsa_key >> $serverdeets
 echo " " >> $serverdeets
@@ -491,6 +504,9 @@ uptime >> $serverdeets
 
 echo " " >> $serverdeets
 echo "StackScript started $thedate" >> $serverdeets
+
+# list installed packages and versions
+apt list --installed > /root/setup/packages
 
 
 # done #########################################################################
@@ -508,16 +524,10 @@ cat > /etc/motd << EOF
 EOF
 
 
-# list installed packages and versions
-apt list --installed > /root/setup/packages
-
 # free pagecache, dentries and inodes.
 sync;
 echo 3 > /proc/sys/vm/drop_caches;
 sync;
-
-
-# git clone https://github.com/${github_user}/${github_repo}.git
 
 
 # --- start sshd ! ---
@@ -531,10 +541,10 @@ SSFIN=$(date)
 echo "StackScript finished $SSFIN" >> $serverdeets
 touch -f /etc/stackscript
 # save info in extended file attributes
-setfattr -n user.crgmnet_stackscript -v "setup finished" /etc/stackscript
 setfattr -n user.crgmnet_vmname -v "${vm_name}" /etc/stackscript
 setfattr -n user.crgmnet_user -v "${DEPLOYUSER}" /etc/stackscript
 setfattr -n user.crgmnet_ipw -v "${sshipwhitelist}" /etc/stackscript
+setfattr -n user.crgmnet_stackscript -v "setup finished" /etc/stackscript
 echo "[*] StackScript Finished" | logger;
 chattr +i /etc/stackscript
 

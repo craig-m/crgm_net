@@ -21,6 +21,7 @@ ufw allow out 80,443/tcp # http/s
 ufw allow out 53,123/tcp # dns, ntp
 ufw allow out 53,123/udp # dns, ntp
 ufw allow out 67,68/udp # dhcp
+ufw allow out 11371/tcp # OpenPGP HTTP Keyserver
 
 # enable
 systemctl enable ufw
