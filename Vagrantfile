@@ -19,15 +19,12 @@ Vagrant.configure(VAGRANT_API_VER) do |config|
     vb.cpus = 2
   end
 
-  # no ssh agent forwarding
-  config.ssh.forward_agent = false
+  # forward desktop SSH agent into VM
+  config.ssh.forward_agent = true
 
   # Port forwarding
   config.vm.network :forwarded_port, guest: 22, host: 2929, id: 'ssh'
   config.vm.network :forwarded_port, guest: 4000, host: 4949, id: 'jekyll'
-
-  # share dir
-  config.vm.synced_folder ".", "/vagrant", owner: "vagrant", group: "vagrant"
 
   # provisioning script (as root user)
   config.vm.provision :shell, :path => "Vagrantfile_root.sh", :privileged => true

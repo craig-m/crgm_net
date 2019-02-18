@@ -9,9 +9,9 @@ I needed some simple hosting that was stable and cheap (in cost, and in time/mai
 When I have more time available I will build something better and replace this solution, like the *many* others that come before it.
 
 
-# Stack
+## Stack overview
 
-### infrastructure
+### hosting infrastructure
 * VPS: https://www.linode.com
 * DNS: https://www.gandi.net/
 * TLS: https://letsencrypt.org/
@@ -23,16 +23,19 @@ When I have more time available I will build something better and replace this s
 * Web site: https://jekyllrb.com
 
 ### local environment
-* dev/management VM: https://www.vagrantup.com
+* Vagrant VM: https://www.vagrantup.com
 * Linode api + tools: https://github.com/linode/linode-cli
+* Puppet Bolt: https://puppet.com/products/puppet-bolt
 
 
 # Documentation
 
-On your Mac/Linux/Win desktop install Vagrant + a provider.
+On your Mac/Linux/Win desktop install Vagrant, and provider (eg VirtualBox).
 
-Clone this repo, then in this dir:
-
+```
+git clone https://github.com/craig-m/crgm_net.git
+cd crgm_net
+```
 
 ## setup Linode-cli
 
@@ -52,7 +55,9 @@ Config will be saved at `/home/vagrant/.linodecli/config`
 
 ## set environment vars
 
-All config is set in environment variables. Change and paste into shell:
+All config is held in environment variables.
+
+Change and paste into vagrant VM shell:
 
 ```
 export vm_name="crgmnetsrv_001"
@@ -64,17 +69,19 @@ export vm_ip_whitelist="x.x.x.x"
 ```
 
 
-## setup virtual machine
+## Create new cloud VM
 
-To deploy a new linode (using the details above):
+To deploy a new Linode (using the details above):
 
 ```
 vagrant@stretch:/vagrant$ ./create_linode.sh create
 ```
 
-
-To rebuild the existing linode:
+To rebuild an existing Linode (note this will delete the existing VM!):
 
 ```
 vagrant@stretch:/vagrant$ ./create_linode.sh recreate
 ```
+
+
+Now see puppet.md for using Bolt to run tasks/scripts on the VM.

@@ -195,6 +195,10 @@ echo "AllowGroups sshusers" >> /etc/ssh/sshd_config
 
 echo "[*] create a non-root user that has [passworded] sudo";
 
+# create groups
+groupadd devops
+groupadd webdev
+
 # create /etc/skel files
 cat >> /etc/skel/.screenrc << EOF
 # ~/.screenrc

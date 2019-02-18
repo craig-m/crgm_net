@@ -16,7 +16,7 @@ apt-get update
 apt-get install --assume-yes --quiet \
   build-essential git uuid pass attr \
   rsync wget curl nmap \
-  screen tmux vim jq \
+  screen tmux vim jq expect \
   ruby-full
 
 # install linode-cli
