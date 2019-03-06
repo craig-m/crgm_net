@@ -1,6 +1,6 @@
 #!/bin/bash
 
-kernver="4.20.10";
+kernver="4.20.14";
 
 if [ ! -f /etc/stackscript ]; then
   echo "error: stackscript did not run on linode";
